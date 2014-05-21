@@ -7,6 +7,7 @@
 #include <mpi.h>
 #include <assert.h>
 #include <stdio.h>
+#include <time.h>
 #include "../include/_pargresql_memory_manager.h"
 
 static int node, nodescount;
@@ -47,12 +48,14 @@ void Start()
 	MPI_Status status;
 	int blockNumber, i, flag, res;
 	int processing_count, unprocessed_count;
-
+	double time_1, time_2;	
 	while (1) {
+		time_1=MPI_Wtime();
 		blockNumber = GetUnprocBlockNumber();
 		block = GetBlock(blockNumber);
-
 		if (block->msgType == TO_SEND) {
+			time_2=MPI_Wtime()-time_1;		
+			printf("%lf\n%lf\n",time_1, time_2);
 			printf("\t#Узел %d отсылается сообщение блока %d размер %d байт на узел %d\n", node, blockNumber, block->msgSize, block->node);fflush(stdout);
 			res = MPI_Isend(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
 			assert(res == MPI_SUCCESS);
