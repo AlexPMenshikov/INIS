@@ -7,7 +7,6 @@
 #include <mpi.h>
 #include <assert.h>
 #include <stdio.h>
-#include <time.h>
 #include "../include/_pargresql_memory_manager.h"
 
 static int node, nodescount;
@@ -55,34 +54,63 @@ void Start()
 		block = GetBlock(blockNumber);
 		if (block->msgType == TO_SEND) {
 			time_2=MPI_Wtime()-time_1;		
-			printf("%lf\n%lf\n",time_1, time_2);
-			printf("\t#Узел %d отсылается сообщение блока %d размер %d байт на узел %d\n", node, blockNumber, block->msgSize, block->node);fflush(stdout);
-			res = MPI_Isend(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			printf("SEND TIME %lf\n%lf\n",time_1, time_2);
+		/*
+  			if (the window size >= MSS) && (available data is >= MSS){
+    			send complete MSS segment now
+    			}
+  			else{
+    			if (there is unconfirmed data still in the pipe){
+      				enqueue data in the buffer until an acknowledge is received
+    			}
+    			else{
+      				send data immediately
+    			}
+    		}    		
+		*/
+			//printf("\t#Узел %d отсылается сообщение блока %d размер %d байт на узел %d\n", node, blockNumber, block->msgSize, block->node);fflush(stdout);
+			res = MPI_Send_init(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			//res = MPI_Isend(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			/*MPI_Isend(void *buf, int count, MPI_Datatype datatype, int dest, int msgtag, MPI_Comm comm, MPI_Request *request)*/
+			/*MPI_Send_init( void *buf, int count, MPI_Datatype datatype, int dest, int msgtag, MPI_Comm comm, MPI_Request *request) */
+			assert(res == MPI_SUCCESS);			
+			MPI_Start(&rqsts[blockNumber]);
 			assert(res == MPI_SUCCESS);
 		} else if (block->msgType == TO_RECV) {
-			printf("\t#Узел %d принимается сообщение блока %d размер %d байт c узла %d\n", node, blockNumber, block->msgSize, block->node);fflush(stdout);
-			res = MPI_Irecv(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			time_2=MPI_Wtime()-time_1;		
+			printf("RECV TIME %lf\n%lf\n",time_1, time_2);			
+			//printf("\t#Узел %d принимается сообщение блока %d размер %d байт c узла %d\n", node, blockNumber, block->msgSize, block->node);fflush(stdout);
+			res = MPI_Recv_init( block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			//res = MPI_Irecv(block->msg, block->msgSize, MPI_BYTE, block->node, block->port, MPI_COMM_WORLD, &rqsts[blockNumber]);
+			//int MPI_Recv_init( void *buf, int count, MPI_Datatype datatype, int source, int msgtag, MPI_Comm comm, MPI_Request *request)
+			assert(res == MPI_SUCCESS);
+			MPI_Start(&rqsts[blockNumber]);
 			assert(res == MPI_SUCCESS);
 		} else if (block->msgType == TO_PROBE) {
 			res = MPI_Iprobe(block->node, block->port, MPI_COMM_WORLD, &flag, &status);
 			assert(res == MPI_SUCCESS);
-
+			/*res= MPI_Start(&rqsts[blockNumber]);
+		  	assert(res == MPI_SUCCESS);*/
 			if (flag == 1) {
 			 res = MPI_Get_count(&status, MPI_BYTE, &block->msgSize);
 			 assert(res == MPI_SUCCESS);
 			}
-
 			res = sem_post(&block->state);
 			assert(res == 0);
+			/*res = MPI_Start(&rqsts[blockNumber]);
+			assert(res == MPI_SUCCESS);*/
+			time_2=MPI_Wtime()-time_1;		
+			printf("PROB TIME %lf\n%lf\n",time_1, time_2);
 			continue;
 		} else if (block->msgType == CLOSE) {
 			printf("\t#Узел %d получена команда CLOSE\n", node);
 			unprocessed_count = UnprocBlocksCount();
 			assert(unprocessed_count == 0);
 			break;
-		} else
+		} else {
 			assert(0);
-
+		}
+	
 		SetCurrentBlockNumber(blockNumber);
 		processing_count = CurrentBlocksCount();
 
@@ -95,7 +123,7 @@ void Start()
 				assert(res == MPI_SUCCESS);
 
 				if (flag == 1) {
-					printf("\t#Узел %d коммуникатор отослал/принял сообщение блока %d\n", node, blockNumber);fflush(stdout);
+					//printf("\t#Узел %d коммуникатор отослал/принял сообщение блока %d\n", node, blockNumber);fflush(stdout);
 					res = sem_post(&block->state);
 					assert(res == 0);
 				} else {
